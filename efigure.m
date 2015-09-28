@@ -1,9 +1,9 @@
-% EFIGURE - figure with export-fig toolbar buttons built in
+% EFIGURE - figure with export-fig toolbar icons built in
 %
-%  Add upto 2 toolbar icons which should be used for saving images
+%  Add toolbar icons which for saving images
 %   to clipboard (PC only) or to file using export_fig.
 %
-%   Function can be used in 2 ways:
+%   Can be used in 2 ways:
 %      1. Automatically add the toolbar items for EVERY future figure
 %      2. Call it manually everytime you want to add the toolbar items to:
 %           A figure
@@ -12,7 +12,7 @@
 %  1. To set up for ALL future figures being created
 %  -------------------------------------------------
 %    Put this in startup.m.  Then every figure contains the toolbar items.
-%      efigure ( 'setup' );
+%      efigure ( '*setup*' );
 %    
 %    When used automatically a few methods to manage usage:
 %
@@ -58,6 +58,13 @@
 %  Developer note: this used mlock
 %
 %  see also export_fig, mlock, startup, test_efigure
+%
+%   Any bug reports/feature requests please report via github
+%
+%  Note: This makes use of a lot of undocumented features - please
+%        use with the appropriate caution and knowledge that it may 
+%        work differently on different platforms/java etc...
+%
 %
 % Author   : Robert Cumming
 % Copyright: Matpi Ltd
