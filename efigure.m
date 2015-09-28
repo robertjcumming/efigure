@@ -85,7 +85,7 @@ function varargout = efigure ( primaryArg, varargin )
   isFigure = true;
   if nargin >= 1
     if ishandle ( primaryArg )
-      hFig = ancestor ( primaryArg, 'figure' );
+      hFig = handle(ancestor ( primaryArg, 'figure' ));
       isFigure = isequal ( primaryArg, hFig );
     end
   end
@@ -370,12 +370,16 @@ function customExportFile ( parentFig )
       delete(hFig);
       export_fig ( hFig, filename, extras{:} );
     catch le
-      fprintf ( 2, 'command: exportFig ( hFig, filename, extras{:}\n' );
-      try %#ok<TRYNC>
-        disp ( extras )
+      if isempty ( extras )
+        fprintf ( 2, 'command: exportFig ( hFig, ''%s'' );\n', filename );
+      else
+        extras = sprintf ( '''%s'', ', extras{:} );
+        fprintf ( 2, 'command: exportFig ( hFig, ''%s'', %s );\n', filename, extras(1:end-2) );
       end
       errordlg ( 'Error processing see commandline', 'eFigure Error' );
-      delete(hFig);
+      if ishandle ( hFig )
+        delete(hFig);
+      end
       rethrow(le);
     end
     
