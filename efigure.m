@@ -1,20 +1,20 @@
 % EFIGURE - figure with export-fig toolbar buttons built in
 %
-%  Adds 2 toolbar icons which should be used for saving images
-%   to clipboard or to file.
+%  Add upto 2 toolbar icons which should be used for saving images
+%   to clipboard (PC only) or to file using export_fig.
 %
 %   Function can be used in 2 ways:
-%      1. Allow it to automatically add the toolbar items for EVERY future figure
+%      1. Automatically add the toolbar items for EVERY future figure
 %      2. Call it manually everytime you want to add the toolbar items to:
 %           A figure
 %           A toolbar
 %
 %  1. To set up for ALL future figures being created
 %  -------------------------------------------------
-%    You would put this is your startup.m
+%    Put this in startup.m.  Then every figure contains the toolbar items.
 %      efigure ( 'setup' );
 %    
-%    When used for all figures a few methods to turn on/off and reset
+%    When used automatically a few methods to manage usage:
 %
 %     Disable this feature (valid for each matlab session)
 %      efigure ( '*disable*' ); 
@@ -23,7 +23,20 @@
 %      efigure ( '*enable*' ); 
 %
 %    Reset the default export_fig options in the filechooser dialog:
-%      efigure ( '*reset*' ); 
+%      efigure ( '*reset*' );
+%
+%    Diable capability to add toolbar to all future figures
+%      efigure ( '*resetAll*' );
+%
+%    When creating a new figure -> it will automatically rearrange the 
+%     toolbar items to insert the clipboard(pc only) and file save next
+%     to the traditional save icon.  You can manage this using:
+%
+%    To stop rearrangement (valid for each matlab session):
+%     efigure ( '*norearrange* );
+%
+%    To reengage the rearrangement:
+%     efigure ( '*rearrange* );
 %
 %
 %  2. Using it manually 
@@ -44,40 +57,56 @@
 %
 %  Developer note: this used mlock
 %
-%  see also export_fig, mlock
+%  see also export_fig, mlock, startup, test_efigure
 %
 % Author   : Robert Cumming
 % Copyright: Matpi Ltd
 %            Developers of Matlab GUI Toolbox 
-%               - free download www.matpi.com or 
+%               - free demo from www.matpi.com or 
 %               -               https://github.com/robertjcumming/matpigui
 %               -  contact @ matpi.com
 %
 function varargout = efigure ( primaryArg, varargin )
-  persistent disable
+  persistent disable rearrange
   if isempty ( disable ); disable = false; end
+  if isempty ( rearrange ); rearrange = true; end
   if nargin == 0
-    hFig = builtin ( 'figure', varargin{:} );
+    hFig = builtin ( 'figure' );
+    foundFig = true;
   elseif nargin == 1 && ischar(primaryArg)
     if strcmp ( primaryArg, '*setup*' )
-      if isempty ( getappdata ( 0, 'EFIGURE' ) )
+      if isempty ( getappdata ( 0, 'EFIGUREADDED' ) )
         if ~verLessThan ( 'matlab', '8.4' ) % R2014b onwards
           h = addlistener ( groot, 'ObjectChildAdded', @setup_efigure);
-          setappdata ( 0, 'EFIGUREADDED', h )
+          setappdata ( groot, 'EFIGUREADDED', h )
         else
           h = addlistener ( 0, 'ObjectChildAdded', @setup_efigure);
           setappdata ( 0, 'EFIGUREADDED', h )
         end
       end
+    elseif strcmp ( primaryArg, '*resetAll*' )
+      if ~verLessThan ( 'matlab', '8.4' ) % R2014b onwards
+        h = getappdata ( groot, 'EFIGUREADDED' );
+      else
+        h = getappdata ( 0, 'EFIGUREADDED' );
+      end
+      delete(h);
+      disable = [];
+      rearrange = [];
+      setappdata ( 0, 'EFIGUREADDED', [] )
     elseif strcmp ( primaryArg, '*reset*' )
       customExportFile();
-    elseif strcmp ( primaryArg, '*enable*' );
+    elseif strcmp ( primaryArg, '*enable*' )
       disable = false;
-    elseif strcmp ( primaryArg, '*disable*' );
+    elseif strcmp ( primaryArg, '*disable*' )
       disable = true;
+    elseif strcmp ( primaryArg, '*rearrange*' )
+      rearrange = true;
+    elseif strcmp ( primaryArg, '*norearrange*' )
+      rearrange = false;
     end
     return
-  end
+  end 
   % if disabled -> exit
   if disable; return; end
   % Lock this function to retain options and memory
@@ -86,41 +115,53 @@ function varargout = efigure ( primaryArg, varargin )
   % Check to see if the 1st arg is a toolbar (assumption that if not figure -> its a toolbar.
   isFigure = true;
   if nargin >= 1
-    if ishandle ( primaryArg )
+    foundFig = false;
+    if ishandle ( primaryArg ) % assumption that this is either a toolbar object or a figure handle.
       hFig = handle(ancestor ( primaryArg, 'figure' ));
-      isFigure = isequal ( primaryArg, hFig );
+      isFigure = isequal ( handle(primaryArg), hFig );
+      foundFig = true;
     end
   end
+  % have we found the figure from the input args
+  if foundFig == false;
+    hFig = builtin ( 'figure', primaryArg, varargin{:} );
+  end 
 
   hFig = handle(hFig);
-  if isFigure
+  if isFigure % user passed in a figure handle
     hToolbar = getHToolbar(hFig);
-  else
+  else % user passed in a toolbar handle.
     hToolbar = primaryArg;
   end
   hButtons = handle(findall(hToolbar));
   % Check to see if the toolbar buttons have already been added
-  if isFigure == false || ~isempty ( hButtons ) && ~any ( strcmp ( get ( hButtons, 'Tag' ), 'Matpi.Save' ) )
+  if ( isFigure == false || ~isempty ( hButtons ) ) && ~any ( strcmp ( get ( hButtons, 'Tag' ), 'Matpi.Save' ) )
     % Clipboard toolbar image
     extras = 2;
+    if rearrange
+      separator = 'off';
+    else
+      separator = 'on';
+    end
     if ispc 
       cdataClip(:,:,1) = [NaN,NaN,NaN,0.95,0.96,0.95,0.96,0.71,0.71,0.95,0.95,0.96,0.96,NaN,NaN,NaN;NaN,NaN,0.70,0.68,0.65,0.79,0.81,0.77,0.76,0.81,0.80,0.65,0.68,0.68,0.98,NaN;NaN,0.89,0.65,0.72,0.98,0.79,0.79,0.79,0.79,0.79,0.77,0.99,0.73,0.66,0.86,NaN;NaN,0.89,0.62,0.81,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0.85,0.62,0.85,NaN;NaN,0.88,0.60,0.79,NaN,NaN,0.00,0.00,0.00,NaN,0.98,NaN,0.84,0.59,0.84,NaN;NaN,0.87,0.58,0.78,0.99,0.00,0.97,0.97,0.98,0.00,0.98,NaN,0.83,0.56,0.84,NaN;NaN,0.87,0.54,0.76,0.98,0.00,0.96,0.97,0.96,0.96,0.97,0.99,0.81,0.55,0.82,NaN;NaN,0.86,0.52,0.74,0.98,0.00,0.96,0.96,0.96,0.96,0.96,0.98,0.80,0.52,0.82,NaN;NaN,0.85,0.50,0.72,0.96,0.00,0.94,0.95,0.95,0.00,0.96,0.98,0.78,0.49,0.81,NaN;NaN,0.85,0.47,0.70,0.93,NaN,0.00,0.00,0.00,NaN,0.94,0.97,0.77,0.47,0.80,NaN;NaN,0.84,0.45,0.69,0.94,0.82,0.91,0.91,0.91,0.91,0.92,0.95,0.75,0.45,0.79,NaN;NaN,0.83,0.44,0.56,0.70,0.67,0.71,0.86,0.92,0.90,0.90,0.93,0.73,0.43,0.78,NaN;NaN,0.82,0.43,0.46,0.45,0.45,0.48,0.51,0.62,0.81,0.92,0.95,0.67,0.41,0.77,NaN;NaN,0.81,0.39,0.44,0.44,0.44,0.44,0.44,0.42,0.40,0.41,0.51,0.42,0.40,0.75,NaN;NaN,0.98,0.32,0.34,0.35,0.35,0.35,0.36,0.36,0.35,0.35,0.34,0.35,0.30,0.94,NaN;0.96,0.88,0.81,0.68,0.67,0.66,0.65,0.64,0.64,0.65,0.65,0.67,0.67,0.78,0.86,0.94;];
       cdataClip(:,:,2) = [NaN,NaN,NaN,0.93,0.94,0.91,0.93,0.72,0.71,0.93,0.91,0.94,0.94,NaN,NaN,NaN;NaN,NaN,0.47,0.43,0.36,0.78,0.84,0.67,0.64,0.84,0.80,0.37,0.42,0.45,0.98,NaN;NaN,0.82,0.41,0.53,0.98,0.79,0.79,0.80,0.80,0.79,0.78,0.99,0.56,0.42,0.77,NaN;NaN,0.82,0.36,0.71,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0.76,0.37,0.76,NaN;NaN,0.81,0.34,0.68,NaN,NaN,0.00,0.00,0.00,NaN,0.98,NaN,0.73,0.34,0.75,NaN;NaN,0.80,0.31,0.66,1.00,0.00,0.97,0.97,0.98,0.00,0.98,NaN,0.72,0.31,0.74,NaN;NaN,0.79,0.29,0.64,1.00,0.00,0.96,0.97,0.96,0.96,0.97,1.00,0.70,0.29,0.73,NaN;NaN,0.78,0.26,0.62,0.99,0.00,0.96,0.96,0.96,0.96,0.96,1.00,0.69,0.26,0.72,NaN;NaN,0.77,0.24,0.60,0.97,0.00,0.94,0.95,0.95,0.00,0.96,1.00,0.67,0.23,0.71,NaN;NaN,0.77,0.21,0.58,0.95,NaN,0.00,0.00,0.00,NaN,0.94,0.98,0.66,0.20,0.70,NaN;NaN,0.76,0.18,0.58,0.96,0.82,0.91,0.91,0.91,0.91,0.92,0.96,0.64,0.18,0.70,NaN;NaN,0.75,0.18,0.37,0.66,0.68,0.74,0.87,0.93,0.91,0.90,0.94,0.62,0.16,0.69,NaN;NaN,0.75,0.17,0.22,0.18,0.18,0.27,0.37,0.55,0.79,0.95,0.99,0.53,0.14,0.67,NaN;NaN,0.72,0.15,0.21,0.21,0.21,0.20,0.19,0.17,0.14,0.17,0.33,0.16,0.15,0.65,NaN;NaN,0.98,0.06,0.10,0.10,0.11,0.11,0.11,0.11,0.11,0.10,0.09,0.10,0.04,0.92,NaN;0.96,0.89,0.81,0.62,0.61,0.60,0.59,0.58,0.58,0.59,0.60,0.61,0.61,0.76,0.87,0.94;];
       cdataClip(:,:,3) = [NaN,NaN,NaN,0.88,0.89,0.84,0.87,0.73,0.71,0.87,0.83,0.89,0.89,NaN,NaN,NaN;NaN,NaN,0.12,0.05,0.00,0.75,0.87,0.51,0.44,0.88,0.82,0.00,0.05,0.08,0.96,NaN;NaN,0.71,0.05,0.24,0.96,0.81,0.79,0.82,0.83,0.79,0.79,0.96,0.30,0.06,0.62,NaN;NaN,0.71,0.02,0.53,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,0.62,0.02,0.62,NaN;NaN,0.70,0.01,0.49,NaN,NaN,0.00,0.00,0.00,NaN,0.98,NaN,0.59,0.00,0.62,NaN;NaN,0.70,0.00,0.49,1.00,0.00,0.97,0.97,0.98,0.00,0.98,NaN,0.58,0.00,0.61,NaN;NaN,0.70,0.00,0.48,1.00,0.00,0.96,0.97,0.96,0.96,0.97,1.00,0.57,0.00,0.61,NaN;NaN,0.70,0.00,0.47,1.00,0.00,0.96,0.96,0.96,0.96,0.96,1.00,0.57,0.00,0.60,NaN;NaN,0.69,0.00,0.45,0.98,0.00,0.94,0.95,0.95,0.00,0.96,1.00,0.56,0.00,0.59,NaN;NaN,0.69,0.00,0.45,0.96,NaN,0.00,0.00,0.00,NaN,0.94,1.00,0.55,0.00,0.59,NaN;NaN,0.69,0.00,0.45,0.99,0.82,0.91,0.91,0.91,0.91,0.92,0.98,0.53,0.00,0.59,NaN;NaN,0.69,0.00,0.18,0.64,0.70,0.77,0.89,0.94,0.91,0.90,0.95,0.53,0.00,0.59,NaN;NaN,0.68,0.00,0.00,0.00,0.00,0.07,0.24,0.48,0.78,0.97,1.00,0.43,0.00,0.59,NaN;NaN,0.67,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.15,0.00,0.00,0.57,NaN;NaN,0.98,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.91,NaN;0.96,0.89,0.81,0.59,0.58,0.57,0.56,0.56,0.56,0.56,0.57,0.58,0.58,0.77,0.88,0.94;];
-      uipushtool('parent',hToolbar,'cdata',cdataClip, 'ToolTip', 'Copy Image To Clipboard', 'ClickedCallback', @(a,b)exportImage( hFig, '-clipboard' ), 'Tag', 'Matpi.Clipboard' );
+      uipushtool('parent',hToolbar,'cdata',cdataClip, 'ToolTip', 'Copy Image To Clipboard', 'ClickedCallback', @(a,b)exportImage( hFig, '-clipboard' ), 'Tag', 'Matpi.Clipboard', 'separator', separator );
       extras = [2 3];
+      separator = 'off';
     end
     % export fig save toolbar image
     cdataSave(:,:,1) = [0.23,0.23,0.24,0.23,0.29,0.65,0.65,0.65,0.65,0.65,0.65,0.65,0.65,0.12,0.23,0.05;0.23,0.42,0.22,0.23,0.42,0.91,0.92,0.92,0.91,0.89,0.88,0.28,0.85,0.13,0.23,0.22;0.22,0.27,0.31,0.23,0.28,0.86,0.87,0.86,0.84,0.83,0.80,0.28,0.76,0.15,0.27,0.23;0.22,0.26,0.30,0.23,0.27,0.83,0.83,0.83,0.81,0.80,0.78,0.28,0.76,0.17,0.27,0.22;0.22,0.25,0.29,0.23,0.23,0.81,0.80,0.80,0.79,0.76,0.76,0.84,0.76,0.19,0.25,0.21;0.20,0.24,0.32,0.29,0.22,0.22,0.22,0.22,0.22,0.22,0.22,0.22,0.22,0.21,0.24,0.20;0.20,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.20;0.18,0.60,0.85,0.84,0.84,0.85,0.85,0.85,0.85,0.85,0.85,0.85,0.85,0.85,0.59,0.19;0.18,0.87,0.00,0.86,0.00,0.00,0.87,0.00,0.00,0.86,0.00,0.00,0.00,0.00,0.87,0.18;0.17,0.84,0.00,0.84,0.00,0.84,0.00,0.84,0.00,0.84,0.00,0.84,0.84,0.84,0.85,0.17;0.16,0.86,0.00,0.86,0.00,0.86,0.00,0.86,0.00,0.86,0.00,0.86,0.00,0.00,0.86,0.16;0.15,0.84,0.00,0.84,0.00,0.84,0.84,0.84,0.00,0.84,0.00,0.84,0.84,0.00,0.84,0.15;0.14,0.83,0.00,0.86,0.00,0.86,0.86,0.86,0.00,0.86,0.00,0.00,0.00,0.00,0.84,0.14;0.13,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.13;0.12,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.93,0.13;0.07,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.79,0.07;];
     cdataSave(:,:,2) = [0.23,0.24,0.25,0.24,0.30,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.12,0.23,0.05;0.23,0.42,0.22,0.24,0.42,0.96,0.97,0.97,0.96,0.96,0.96,0.29,0.94,0.14,0.23,0.23;0.23,0.29,0.31,0.24,0.28,0.95,0.95,0.95,0.95,0.93,0.92,0.29,0.91,0.16,0.29,0.23;0.23,0.27,0.31,0.24,0.27,0.94,0.94,0.94,0.93,0.91,0.91,0.29,0.91,0.18,0.27,0.23;0.22,0.26,0.30,0.24,0.24,0.92,0.92,0.91,0.91,0.91,0.91,0.94,0.91,0.20,0.26,0.22;0.21,0.25,0.32,0.30,0.22,0.22,0.23,0.22,0.22,0.22,0.22,0.22,0.22,0.21,0.25,0.21;0.20,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.20;0.20,0.64,0.92,0.92,0.92,0.92,0.92,0.92,0.92,0.92,0.92,0.92,0.92,0.92,0.64,0.20;0.19,0.83,0.00,0.83,0.00,0.00,0.83,0.00,0.00,0.83,0.00,0.00,0.00,0.00,0.83,0.19;0.17,0.92,0.00,0.92,0.00,0.92,0.00,0.92,0.00,0.92,0.00,0.92,0.92,0.92,0.92,0.18;0.16,0.83,0.00,0.83,0.00,0.83,0.00,0.83,0.00,0.83,0.00,0.83,0.00,0.00,0.83,0.16;0.16,0.91,0.00,0.92,0.00,0.92,0.92,0.92,0.00,0.92,0.00,0.92,0.92,0.00,0.92,0.16;0.15,0.91,0.00,0.83,0.00,0.83,0.83,0.83,0.00,0.83,0.00,0.00,0.00,0.00,0.92,0.15;0.14,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.14;0.13,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.50,0.13;0.07,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.43,0.07;];
     cdataSave(:,:,3) = [0.25,0.25,0.26,0.25,0.32,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.70,0.13,0.25,0.05;0.25,0.43,0.23,0.25,0.43,0.96,0.97,0.97,0.96,0.96,0.96,0.30,0.94,0.14,0.25,0.24;0.24,0.30,0.32,0.25,0.30,0.95,0.95,0.95,0.95,0.93,0.92,0.30,0.91,0.16,0.30,0.24;0.24,0.29,0.32,0.25,0.29,0.94,0.94,0.94,0.93,0.91,0.91,0.30,0.91,0.18,0.29,0.24;0.23,0.27,0.31,0.25,0.25,0.92,0.92,0.91,0.91,0.91,0.91,0.94,0.91,0.21,0.27,0.23;0.22,0.26,0.33,0.31,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.23,0.22,0.26,0.22;0.22,0.24,0.24,0.25,0.24,0.25,0.25,0.24,0.24,0.25,0.25,0.25,0.25,0.25,0.24,0.22;0.21,0.69,0.99,0.99,0.99,0.99,0.99,0.99,0.99,0.99,0.99,0.99,0.99,0.99,0.69,0.21;0.20,0.77,0.00,0.77,0.00,0.00,0.77,0.00,0.00,0.77,0.00,0.00,0.00,0.00,0.77,0.19;0.18,0.99,0.00,0.99,0.00,0.99,0.00,0.99,0.00,0.99,0.00,0.99,0.99,0.99,0.99,0.18;0.17,0.77,0.00,0.77,0.00,0.77,0.00,0.77,0.00,0.77,0.00,0.77,0.00,0.00,0.77,0.18;0.16,0.98,0.00,0.99,0.00,0.99,0.99,0.99,0.00,0.99,0.00,0.99,0.99,0.00,0.99,0.16;0.15,0.99,0.00,0.77,0.00,0.77,0.77,0.77,0.00,0.77,0.00,0.00,0.00,0.00,0.98,0.15;0.14,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.14;0.13,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.13;0.08,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.07;];    
-    uipushtool('parent',hToolbar,'cdata',cdataSave, 'ToolTip', 'Export Image', 'ClickedCallback', @(a,b)exportImage( hFig, '-file' ), 'Tag', 'Matpi.Save' );
+    uipushtool('parent',hToolbar,'cdata',cdataSave, 'ToolTip', 'Export Image', 'ClickedCallback', @(a,b)exportImage( hFig, '-file' ), 'Tag', 'Matpi.Save', 'separator', separator );
     
     % Extract all the buttons
     hButtons = handle(findall(hToolbar));
     % Rearrange the order of the buttons -> to put the 2 new ones near the start
     nButtons = length(hButtons);
-    if isFigure && nButtons > 9 % 9 is a check that we have enough buttons to rearrange (this is not foolproof).
+    if rearrange && isFigure && nButtons > 9 % 9 is a check that we have enough buttons to rearrange (this is not foolproof).
       if verLessThan ( 'matlab', '8.4' )
         i1 = extras(end)+2; % first index in rearranging
         set(hToolbar,'children',hButtons([i1:(end-4), extras, end-3:end-1]));
@@ -156,8 +197,10 @@ function efigure_child_listener( obj, event )
         hFig = ancestor(obj,'figure');
         efigure(hFig);
         % delete the listener - we dont need it anymore.
-        delete ( hFig.ApplicationData.efigure );
-        hFig.ApplicationData = rmfield ( hFig.ApplicationData, 'efigure' );
+        if isfield ( hFig.ApplicationData, 'efigure' )
+          delete ( hFig.ApplicationData.efigure );
+          hFig.ApplicationData = rmfield ( hFig.ApplicationData, 'efigure' );
+        end
       end
   end
 end
